@@ -69,7 +69,8 @@ a:hover { color: var(--ink); }
   height: 58px;
   border-radius: 50%;
   background-color: var(--bg-logo);
-  background-image: repeating-linear-gradient(45deg, rgba(43,35,32,0.10) 0, rgba(43,35,32,0.10) 3px, transparent 3px, transparent 6px);
+  object-fit: cover;
+  object-position: top center;
   border: 1px solid rgba(43, 35, 32, 0.12);
   flex: none;
 }
