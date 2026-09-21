@@ -279,6 +279,14 @@ function setupEvents() {
     render();
   });
 
+  // Permet de défiler les catégories avec la molette verticale d'une souris classique
+  // (sans trackpad, le défilement horizontal natif n'est sinon accessible qu'au doigt/trackpad).
+  document.getElementById("categories").addEventListener("wheel", e => {
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    e.preventDefault();
+    e.currentTarget.scrollLeft += e.deltaY;
+  }, { passive: false });
+
   document.getElementById("productGrid").addEventListener("click", e => {
     const btn = e.target.closest(".add-btn");
     if (!btn) return;
