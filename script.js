@@ -213,7 +213,7 @@ function renderProducts(list) {
       </select>` : "";
 
     const photo = p.photoUrl
-      ? `<img class="product-photo-img" src="${p.photoUrl}" alt="${p.name}">`
+      ? `<img class="product-photo-img" src="${p.photoUrl}" alt="${p.name}" loading="lazy" decoding="async">`
       : "photo produit";
 
     return `
