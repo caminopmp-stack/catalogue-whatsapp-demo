@@ -595,3 +595,19 @@ a:hover { color: var(--ink); }
   cursor: not-allowed;
 }
 .send-btn.disabled:hover { background: rgba(43, 35, 32, 0.14); }
+
+/* Écrans larges (PC) : la carte s'élargit et le catalogue s'affiche sur plus de colonnes
+   au lieu de rester étroite et isolée au milieu de l'écran comme sur mobile. */
+@media (min-width: 720px) {
+  .card { max-width: 700px; }
+  .product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cart-fab { right: max(18px, calc(50% - 332px)); }
+  .send-bar { width: min(700px, 100%); }
+}
+
+@media (min-width: 1100px) {
+  .card { max-width: 960px; }
+  .product-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .cart-fab { right: max(18px, calc(50% - 462px)); }
+  .send-bar { width: min(960px, 100%); }
+}
