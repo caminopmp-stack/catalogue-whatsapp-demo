@@ -58,6 +58,11 @@ function rowsToProducts(rows) {
     if (String(r.rupture).trim().toLowerCase() === "oui") {
       product.out = true;
     }
+    // Colonne facultative : une promo n'est prise en compte que si elle est inférieure au prix normal
+    const promo = Number(r.prix_promo);
+    if (promo > 0 && promo < product.price) {
+      product.promo = promo;
+    }
     return product;
   });
 }
@@ -89,7 +94,20 @@ async function fetchCatalog() {
   PRODUCTS = rowsToProducts(productRows);
   SHOP = rowsToShop(configRows);
   DELIVERY = rowsToDelivery(deliveryRows);
-  CATS = ["Tous", ...new Set(PRODUCTS.map(p => p.cat))];
+  // La catégorie "Promos" n'apparaît que s'il y a au moins un produit en promotion
+  const hasPromo = PRODUCTS.some(p => p.promo);
+  CATS = ["Tous", ...(hasPromo ? [PROMO_CAT] : []), ...new Set(PRODUCTS.map(p => p.cat))];
+}
+
+const PROMO_CAT = "Promos";
+
+// Prix réellement payé : le prix promo s'il existe, sinon le prix normal
+function priceOf(p) {
+  return p.promo || p.price;
+}
+
+function discountOf(p) {
+  return Math.round((1 - p.promo / p.price) * 100);
 }
 
 const WILAYAS = ["01 Adrar","02 Chlef","03 Laghouat","04 Oum El Bouaghi","05 Batna","06 Béjaïa","07 Biskra","08 Béchar","09 Blida","10 Bouira","11 Tamanrasset","12 Tébessa","13 Tlemcen","14 Tiaret","15 Tizi Ouzou","16 Alger","17 Djelfa","18 Jijel","19 Sétif","20 Saïda","21 Skikda","22 Sidi Bel Abbès","23 Annaba","24 Guelma","25 Constantine","26 Médéa","27 Mostaganem","28 M'Sila","29 Mascara","30 Ouargla","31 Oran","32 El Bayadh","33 Illizi","34 Bordj Bou Arreridj","35 Boumerdès","36 El Tarf","37 Tindouf","38 Tissemsilt","39 El Oued","40 Khenchela","41 Souk Ahras","42 Tipaza","43 Mila","44 Aïn Defla","45 Naâma","46 Aïn Témouchent","47 Ghardaïa","48 Relizane","49 El M'Ghair","50 El Meniaa","51 Ouled Djellal","52 Bordj Baji Mokhtar","53 Béni Abbès","54 Timimoun","55 Touggourt","56 Djanet","57 In Salah","58 In Guezzam"];
@@ -167,15 +185,19 @@ function bumpQty(key, delta) {
 function filteredProducts() {
   const q = state.query.trim().toLowerCase();
   let list = PRODUCTS.filter(p => {
-    if (state.cat !== "Tous" && p.cat !== state.cat) return false;
+    if (state.cat === PROMO_CAT && !p.promo) return false;
+    if (state.cat !== "Tous" && state.cat !== PROMO_CAT && p.cat !== state.cat) return false;
     if (q && !p.name.toLowerCase().includes(q)) return false;
-    if (state.range === "lt3" && p.price >= 3000) return false;
-    if (state.range === "mid" && (p.price < 3000 || p.price > 6000)) return false;
-    if (state.range === "gt6" && p.price <= 6000) return false;
+    const price = priceOf(p);
+    if (state.range === "lt3" && price >= 3000) return false;
+    if (state.range === "mid" && (price < 3000 || price > 6000)) return false;
+    if (state.range === "gt6" && price <= 6000) return false;
     return true;
   });
-  if (state.sort === "asc") list = list.slice().sort((a, b) => a.price - b.price);
-  if (state.sort === "desc") list = list.slice().sort((a, b) => b.price - a.price);
+  if (state.sort === "asc") list = list.slice().sort((a, b) => priceOf(a) - priceOf(b));
+  else if (state.sort === "desc") list = list.slice().sort((a, b) => priceOf(b) - priceOf(a));
+  // Tri par défaut : les promos remontent en tête, l'ordre du Sheet est conservé pour le reste
+  else list = list.slice().sort((a, b) => (b.promo ? 1 : 0) - (a.promo ? 1 : 0));
   return list;
 }
 
@@ -184,13 +206,13 @@ function cartLines() {
     const [id, variant] = key.split("|");
     const p = PRODUCTS.find(x => x.id === id);
     const qty = state.qty[key];
-    return { key, p, variant, qty, sum: p.price * qty };
+    return { key, p, variant, qty, sum: priceOf(p) * qty };
   });
 }
 
 function buildMessage(lines, subtotal, total) {
   const body = lines.map(l =>
-    "- " + l.p.name + (l.variant ? " (" + l.variant + ")" : "") + " x" + l.qty + " — " + fmt(l.sum)
+    "- " + l.p.name + (l.variant ? " (" + l.variant + ")" : "") + " x" + l.qty + " — " + fmt(l.sum) + (l.p.promo ? " (promo)" : "")
   ).join("\n");
 
   const livraison = state.mode
@@ -315,12 +337,15 @@ function renderProducts(list) {
         <div class="product-photo${p.photoUrl ? "" : " stripes"}">
           ${photo}
           ${p.out ? '<div class="stock-badge">Rupture de stock</div>' : ""}
+          ${p.promo ? `<div class="promo-badge">-${discountOf(p)}%</div>` : ""}
         </div>
         <div class="product-info">
           <div class="product-name">${p.name}</div>
           ${variantSelect}
           <div class="product-bottom-row">
-            <div class="product-price">${fmt(p.price)}</div>
+            ${p.promo
+              ? `<div class="product-price promo"><span class="price-old">${fmt(p.price)}</span>${fmt(p.promo)}</div>`
+              : `<div class="product-price">${fmt(p.price)}</div>`}
             <button type="button" class="add-btn" data-product-id="${p.id}" ${p.out ? "disabled" : ""}>
               ${p.out ? "Indisponible" : "Ajouter"}
             </button>

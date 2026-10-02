@@ -311,6 +311,23 @@ a:hover { color: var(--ink); }
   font-weight: 500;
 }
 
+/* Promotion : ancien prix barré au-dessus du prix promo, badge de réduction sur la photo */
+.product-price.promo { display: flex; flex-direction: column; line-height: 1.15; color: var(--accent); }
+.price-old { font-size: 12px; font-weight: 400; color: var(--ink-faint); text-decoration: line-through; }
+
+.promo-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--accent);
+  color: #FFF8F2;
+  font-family: 'Jost', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
 .add-btn {
   border: none;
   font-family: 'DM Sans', sans-serif;
