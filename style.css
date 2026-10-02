@@ -516,6 +516,43 @@ a:hover { color: var(--ink); }
 }
 .contact-input:focus { border-color: rgba(43, 35, 32, 0.4); }
 
+/* Choix du mode de livraison (bureau / domicile) */
+.delivery-options { display: flex; flex-direction: column; gap: 8px; }
+
+.delivery-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  background: var(--bg-card);
+  border: 1px solid rgba(43, 35, 32, 0.12);
+  border-radius: 10px;
+  padding: 11px 12px;
+  cursor: pointer;
+}
+.delivery-option input { accent-color: var(--green); margin: 0; }
+.delivery-option.selected { border-color: var(--green); }
+.delivery-option.unavailable { opacity: 0.5; cursor: not-allowed; }
+.delivery-option-label { flex: 1; }
+.delivery-option-price { font-family: 'Jost', sans-serif; font-weight: 500; }
+
+.delivery-info { font-size: 12.5px; color: var(--ink-muted); }
+
+/* Récapitulatif sous-total / livraison / total */
+.cart-summary {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(43, 35, 32, 0.09);
+}
+
+.cart-summary-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--ink-muted);
+  padding: 0 4px 8px 0;
+}
+
 /* Floating cart button */
 .cart-fab {
   position: fixed;

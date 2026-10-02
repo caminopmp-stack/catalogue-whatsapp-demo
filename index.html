@@ -79,18 +79,35 @@
       </div>
       <div class="cart-empty" id="cartEmpty">Aucun produit sélectionné pour le moment.</div>
       <div id="cartLines"></div>
-      <div class="cart-total-row">
-        <div class="cart-total-label">Total</div>
-        <div class="cart-total-value" id="cartTotal">0 DA</div>
-      </div>
 
       <div class="cart-contact">
         <div class="cart-contact-label">Vos coordonnées</div>
         <input type="text" id="nomInput" class="contact-input" placeholder="Nom et prénom *" aria-label="Nom et prénom">
+        <input type="tel" id="telInput" class="contact-input" placeholder="Téléphone *" aria-label="Téléphone">
         <select id="wilayaSelect" class="contact-input" aria-label="Wilaya">
           <option value="">Wilaya *</option>
         </select>
-        <input type="tel" id="telInput" class="contact-input" placeholder="Téléphone (optionnel)" aria-label="Téléphone">
+        <input type="text" id="communeInput" class="contact-input" placeholder="Commune *" aria-label="Commune">
+      </div>
+
+      <div class="cart-contact" id="deliveryBlock" hidden>
+        <div class="cart-contact-label">Livraison</div>
+        <div class="delivery-options" id="deliveryOptions"></div>
+      </div>
+
+      <div class="cart-summary">
+        <div class="cart-summary-row">
+          <div>Sous-total</div>
+          <div id="cartSubtotal">0 DA</div>
+        </div>
+        <div class="cart-summary-row">
+          <div>Livraison</div>
+          <div id="cartDelivery">—</div>
+        </div>
+        <div class="cart-total-row">
+          <div class="cart-total-label">Total</div>
+          <div class="cart-total-value" id="cartTotal">0 DA</div>
+        </div>
       </div>
     </div>
 

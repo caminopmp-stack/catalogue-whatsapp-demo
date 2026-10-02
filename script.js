@@ -1,10 +1,13 @@
-// Identifiant du Google Sheet qui sert de catalogue (voir onglets "Produits" et "Config")
+// Identifiant du Google Sheet qui sert de catalogue (voir onglets "Produits", "Config" et "Livraison")
 const SHEET_ID = "1O0m5L2eWOTgnipKEsZrNmRFMumukyvAT1PEZyOs9YqU";
 
 // Rempli par fetchCatalog() au chargement, à partir du Sheet
-let SHOP = { name: "", tagline: "", whatsapp: "", instagram: "" };
+let SHOP = { nom_boutique: "", tagline: "", whatsapp: "", instagram: "" };
 let PRODUCTS = [];
 let CATS = ["Tous"];
+let DELIVERY = {}; // numéro de wilaya -> { bureau: prix ou null, domicile: prix ou null }
+
+const DELIVERY_MODES = { bureau: "Bureau (stop desk)", domicile: "À domicile" };
 
 // Interroge un onglet du Sheet via l'endpoint public de Google (gviz) et renvoie
 // ses lignes sous forme de tableau d'objets, un objet par ligne, clé = en-tête de colonne.
@@ -65,13 +68,27 @@ function rowsToShop(rows) {
   return obj;
 }
 
+// Une case vide dans le Sheet = ce mode de livraison n'est pas proposé pour cette wilaya
+function rowsToDelivery(rows) {
+  const price = v => (v === "" || v === null || isNaN(Number(v))) ? null : Number(v);
+  const obj = {};
+  rows.forEach(r => {
+    const num = parseInt(r.num, 10);
+    if (num) obj[num] = { bureau: price(r.prix_bureau), domicile: price(r.prix_domicile) };
+  });
+  return obj;
+}
+
 async function fetchCatalog() {
-  const [productRows, configRows] = await Promise.all([
+  const [productRows, configRows, deliveryRows] = await Promise.all([
     fetchSheetRows("Produits"),
-    fetchSheetRows("Config")
+    fetchSheetRows("Config"),
+    // Onglet facultatif : sans lui, le site marche quand même, tarifs "à confirmer"
+    fetchSheetRows("Livraison").catch(() => [])
   ]);
   PRODUCTS = rowsToProducts(productRows);
   SHOP = rowsToShop(configRows);
+  DELIVERY = rowsToDelivery(deliveryRows);
   CATS = ["Tous", ...new Set(PRODUCTS.map(p => p.cat))];
 }
 
@@ -88,8 +105,36 @@ const state = {
   range: "all",
   nom: "",
   wilaya: "",
-  tel: ""
+  commune: "",
+  tel: "",
+  mode: ""       // "bureau" ou "domicile"
 };
+
+// Tarifs de la wilaya choisie. Wilaya absente de l'onglet Livraison :
+// les deux modes restent proposés, avec un tarif à confirmer par la boutique.
+function ratesFor(wilaya) {
+  if (!wilaya) return null;
+  const rates = DELIVERY[parseInt(wilaya, 10)];
+  return rates || { bureau: undefined, domicile: undefined };
+}
+
+// null = pas proposé, undefined = tarif inconnu (à confirmer), nombre = prix
+function isModeAvailable(rates, mode) {
+  return rates && rates[mode] !== null;
+}
+
+function deliveryCost() {
+  const rates = ratesFor(state.wilaya);
+  if (!state.mode || !isModeAvailable(rates, state.mode)) return null;
+  return rates[state.mode];
+}
+
+function deliveryText() {
+  if (!state.mode) return "—";
+  const cost = deliveryCost();
+  if (cost === undefined) return "à confirmer";
+  return cost === 0 ? "Gratuite" : fmt(cost);
+}
 
 function fmt(n) {
   return n.toLocaleString("fr-FR").replace(/ | /g, " ") + " DA";
@@ -143,26 +188,44 @@ function cartLines() {
   });
 }
 
-function buildMessage(lines, total) {
+function buildMessage(lines, subtotal, total) {
   const body = lines.map(l =>
     "- " + l.p.name + (l.variant ? " (" + l.variant + ")" : "") + " x" + l.qty + " — " + fmt(l.sum)
   ).join("\n");
 
+  const livraison = state.mode
+    ? DELIVERY_MODES[state.mode] + ", " + deliveryText()
+    : "à choisir";
+
   return [
-    "Bonjour " + SHOP.name + ", je souhaite commander :",
+    "Bonjour " + SHOP.nom_boutique + ", je souhaite commander :",
     "",
     body || "(aucun produit sélectionné)",
     "",
-    "Total : " + fmt(total),
+    "Sous-total : " + fmt(subtotal),
+    "Livraison : " + livraison,
+    "Total : " + fmt(total) + (deliveryCost() === undefined ? " + livraison" : ""),
     "",
     "Nom et prénom : " + (state.nom.trim() || "à compléter"),
-    "Wilaya / commune : " + (state.wilaya || "à compléter"),
-    "Téléphone : " + (state.tel.trim() || "—")
+    "Téléphone : " + (state.tel.trim() || "à compléter"),
+    "Wilaya : " + (state.wilaya || "à compléter"),
+    "Commune : " + (state.commune.trim() || "à compléter")
   ].join("\n");
 }
 
+// Liste des informations encore manquantes pour pouvoir envoyer la commande
+function missingFields() {
+  const missing = [];
+  if (state.nom.trim().length < 2) missing.push("nom");
+  if (state.tel.replace(/[^0-9]/g, "").length < 9) missing.push("téléphone");
+  if (!state.wilaya) missing.push("wilaya");
+  if (state.commune.trim().length < 2) missing.push("commune");
+  if (!state.mode) missing.push("mode de livraison");
+  return missing;
+}
+
 function render() {
-  document.getElementById("shopName").textContent = SHOP.name;
+  document.getElementById("shopName").textContent = SHOP.nom_boutique;
   document.getElementById("tagline").textContent = SHOP.tagline;
   document.getElementById("instagramLink").href = "https://instagram.com/" + SHOP.instagram.replace(/^@/, "");
 
@@ -174,15 +237,18 @@ function render() {
   document.getElementById("noResults").hidden = list.length !== 0;
 
   const lines = cartLines();
-  const total = lines.reduce((a, l) => a + l.sum, 0);
+  const subtotal = lines.reduce((a, l) => a + l.sum, 0);
+  const total = subtotal + (deliveryCost() || 0);
   const count = lines.reduce((a, l) => a + l.qty, 0);
-  const message = buildMessage(lines, total);
+  const message = buildMessage(lines, subtotal, total);
 
-  renderCart(lines, total, count);
+  renderCart(lines, subtotal, total, count);
+  renderDelivery();
 
   document.getElementById("fallbackMessage").value = message;
 
-  const canSend = count > 0 && state.nom.trim().length > 1 && !!state.wilaya;
+  const missing = missingFields();
+  const canSend = count > 0 && missing.length === 0;
   const num = SHOP.whatsapp.replace(/[^0-9]/g, "");
   const sendBtn = document.getElementById("sendBtn");
   const sendNote = document.getElementById("sendNote");
@@ -192,7 +258,35 @@ function render() {
   sendNote.hidden = canSend;
   sendNote.textContent = count === 0
     ? "Ajoutez au moins un produit pour envoyer votre commande."
-    : "Renseignez votre nom et votre wilaya dans « Ma sélection ».";
+    : "À compléter dans « Ma sélection » : " + missing.join(", ") + ".";
+}
+
+function renderDelivery() {
+  const block = document.getElementById("deliveryBlock");
+  const rates = ratesFor(state.wilaya);
+  block.hidden = !rates;
+  if (!rates) return;
+
+  const el = document.getElementById("deliveryOptions");
+  const available = Object.keys(DELIVERY_MODES).filter(m => isModeAvailable(rates, m));
+
+  if (available.length === 0) {
+    el.innerHTML = '<div class="delivery-info">Livraison non disponible vers cette wilaya pour le moment.</div>';
+    return;
+  }
+
+  el.innerHTML = Object.keys(DELIVERY_MODES).map(mode => {
+    const ok = isModeAvailable(rates, mode);
+    const price = !ok ? "Non disponible"
+      : rates[mode] === undefined ? "à confirmer"
+      : rates[mode] === 0 ? "Gratuite" : fmt(rates[mode]);
+    return `
+      <label class="delivery-option${state.mode === mode ? " selected" : ""}${ok ? "" : " unavailable"}">
+        <input type="radio" name="deliveryMode" value="${mode}" ${state.mode === mode ? "checked" : ""} ${ok ? "" : "disabled"}>
+        <span class="delivery-option-label">${DELIVERY_MODES[mode]}</span>
+        <span class="delivery-option-price">${price}</span>
+      </label>`;
+  }).join("");
 }
 
 function renderCategories() {
@@ -236,7 +330,7 @@ function renderProducts(list) {
   }).join("");
 }
 
-function renderCart(lines, total, count) {
+function renderCart(lines, subtotal, total, count) {
   document.getElementById("cartEmpty").style.display = lines.length === 0 ? "block" : "none";
   document.getElementById("cartSheet").hidden = !state.cartOpen;
   document.getElementById("cartFab").style.display = state.cartOpen ? "none" : "flex";
@@ -254,7 +348,9 @@ function renderCart(lines, total, count) {
       </div>
     </div>`).join("");
 
-  document.getElementById("cartTotal").textContent = fmt(total);
+  document.getElementById("cartSubtotal").textContent = fmt(subtotal);
+  document.getElementById("cartDelivery").textContent = deliveryText();
+  document.getElementById("cartTotal").textContent = fmt(total) + (deliveryCost() === undefined ? " + livraison" : "");
 
   const badge = document.getElementById("cartBadge");
   badge.textContent = count;
@@ -364,6 +460,19 @@ function setupEvents() {
 
   document.getElementById("wilayaSelect").addEventListener("change", e => {
     state.wilaya = e.target.value;
+    // Le mode choisi n'existe peut-être pas dans la nouvelle wilaya
+    if (state.mode && !isModeAvailable(ratesFor(state.wilaya), state.mode)) state.mode = "";
+    render();
+  });
+
+  document.getElementById("communeInput").addEventListener("input", e => {
+    state.commune = e.target.value;
+    render();
+  });
+
+  document.getElementById("deliveryOptions").addEventListener("change", e => {
+    if (e.target.name !== "deliveryMode") return;
+    state.mode = e.target.value;
     render();
   });
 
